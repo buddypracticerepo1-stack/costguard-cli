@@ -5,7 +5,7 @@ Cloud cost analysis tool for Terraform. Get cost estimates before deploying infr
 ## Installation
 
 ```bash
-pip install costguard
+pip install git+https://github.com/buddypracticerepo1-stack/costguard-cli.git
 ```
 
 ## Quick Start
@@ -122,7 +122,7 @@ Show version information.
 
 ```yaml
 - name: Install CostGuard
-  run: pip install costguard
+  run: pip install git+https://github.com/buddypracticerepo1-stack/costguard-cli.git
 
 - name: Analyze costs
   env:
@@ -150,7 +150,7 @@ Show version information.
 cost-check:
   image: python:3.11
   script:
-    - pip install costguard
+    - pip install git+https://github.com/buddypracticerepo1-stack/costguard-cli.git
     - costguard breakdown --config costguard.yml --format json
 ```
 
