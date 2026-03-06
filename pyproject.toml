@@ -1,0 +1,72 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "costguard"
+version = "0.1.0"
+description = "CostGuard CLI - Cloud Cost Analysis Tool"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "SkyXOps", email = "support@skyxops.com"}
+]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "Intended Audience :: System Administrators",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: System :: Systems Administration",
+    "Topic :: Office/Business :: Financial",
+]
+keywords = ["terraform", "cloud", "cost", "aws", "gcp", "azure", "finops"]
+requires-python = ">=3.8"
+dependencies = [
+    "typer>=0.9.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "requests>=2.28.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-cov>=4.0.0",
+    "black>=23.0.0",
+    "mypy>=1.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+costguard = "costguard.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/skyxops/costguard-cli"
+Documentation = "https://docs.costguard.io"
+Repository = "https://github.com/skyxops/costguard-cli"
+Issues = "https://github.com/skyxops/costguard-cli/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["costguard*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py38", "py39", "py310", "py311", "py312"]
+
+[tool.ruff]
+line-length = 100
+select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.mypy]
+python_version = "3.8"
+strict = true
