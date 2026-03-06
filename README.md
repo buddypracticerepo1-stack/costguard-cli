@@ -53,6 +53,33 @@ output:
   show_resources: true
 ```
 
+### Project Options
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `path` | Yes | Path to Terraform directory |
+| `name` | No | Display name (defaults to path) |
+| `terraform_var_files` | No | List of .tfvars files to use |
+| `terraform_vars` | No | Inline Terraform variables (key-value) |
+| `terraform_workspace` | No | Terraform workspace name |
+| `usage_file` | No | Path to usage file for usage-based pricing |
+| `skip` | No | Skip this project (default: false) |
+
+**Example with all options:**
+```yaml
+projects:
+  - path: infrastructure/aws
+    name: AWS Production
+    terraform_var_files:
+      - prod.tfvars
+    terraform_vars:
+      environment: production
+      instance_count: "3"
+    terraform_workspace: production
+    usage_file: usage/aws-usage.yml
+    skip: false
+```
+
 ## Commands
 
 ### `costguard breakdown`

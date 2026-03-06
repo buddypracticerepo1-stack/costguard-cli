@@ -1,6 +1,6 @@
 """CostGuard configuration schema using Pydantic"""
 
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -9,7 +9,9 @@ class ProjectConfig(BaseModel):
     path: str = Field(..., description="Path to Terraform directory")
     name: Optional[str] = Field(None, description="Display name")
     terraform_var_files: Optional[List[str]] = Field(None, description="Terraform var files")
+    terraform_vars: Optional[Dict[str, str]] = Field(None, description="Inline Terraform variables")
     terraform_workspace: Optional[str] = Field(None, description="Terraform workspace")
+    usage_file: Optional[str] = Field(None, description="Path to usage file for usage-based pricing")
     skip: bool = Field(False, description="Skip this project")
 
     def get_name(self) -> str:
