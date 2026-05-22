@@ -174,6 +174,122 @@ def configure(
 
 
 @app.command()
+def analyze(
+    path: str = typer.Argument(
+        ...,
+        help="Path to terraform plan JSON, CloudFormation template (YAML/JSON), "
+             "or `aws cloudformation describe-change-set` output"
+    ),
+    iac_type: Optional[str] = typer.Option(
+        None, "--iac-type",
+        help="Override auto-detect: terraform | cloudformation"
+    ),
+    region: Optional[str] = typer.Option(
+        None, "--region",
+        help="Cloud region (required for CloudFormation; ignored for terraform)"
+    ),
+    budget_code: Optional[str] = typer.Option(
+        None, "--budget-code",
+        help="Budget code (or set --skip-budget for pricing-only mode)"
+    ),
+    skip_budget: bool = typer.Option(
+        True, "--skip-budget/--check-budget",
+        help="Skip budget validation (default: skip)"
+    ),
+    api_key: Optional[str] = typer.Option(
+        None, "--api-key",
+        help="CostGuard API key (or set COSTGUARD_API_KEY)"
+    ),
+    api_url: Optional[str] = typer.Option(
+        None, "--api-url",
+        help="CostGuard API base URL (or set COSTGUARD_API_URL)"
+    ),
+):
+    """
+    Analyze a single IaC plan file with auto-detection.
+
+    Detects iac_type from file content (terraform plan JSON has
+    format_version/resource_changes; CloudFormation template has
+    Resources/AWSTemplateFormatVersion; CFN changeset has Changes[]),
+    validates locally, and exits non-zero when the API returns errors
+    even inside HTTP 200 envelopes.
+
+    Examples:
+        costguard analyze plan.json
+        costguard analyze template.yaml --region us-east-1
+        costguard analyze changeset.json --region eu-west-1
+    """
+    from .utils.detect import detect_payload
+    from .utils.validate import validate_payload, ValidationError
+    from .api.client import CostGuardClient
+
+    # Build payload
+    try:
+        body = detect_payload(path)
+    except (FileNotFoundError, ValueError) as e:
+        console.print(f"[red]Input error:[/red] {e}")
+        raise typer.Exit(2)
+
+    # Apply overrides
+    if iac_type:
+        body["iac_type"] = iac_type
+    if region:
+        body["region"] = region
+    if budget_code:
+        body["budget_code"] = budget_code
+    body.setdefault("options", {})["skip_budget"] = skip_budget
+    body["options"].setdefault("skip_guardrails", True)
+    body["options"].setdefault("include_calculations", False)
+
+    # Local validation
+    try:
+        validate_payload(body, region=region)
+    except ValidationError as e:
+        console.print(f"[red]Validation error:[/red] {e}")
+        raise typer.Exit(2)
+
+    # Resolve API key + URL
+    import os
+    key = api_key or get_api_key() or os.environ.get("COSTGUARD_API_KEY")
+    if not key:
+        console.print("[red]Error:[/red] No API key found.")
+        console.print("Set COSTGUARD_API_KEY or run: costguard configure --api-key YOUR_KEY")
+        raise typer.Exit(2)
+    url = api_url or os.environ.get("COSTGUARD_API_URL")
+
+    client = CostGuardClient(api_key=key, api_url=url) if url else CostGuardClient(api_key=key)
+
+    console.print(
+        f"Analyzing [cyan]{path}[/cyan] "
+        f"(iac_type={body['iac_type']}, iac_format={body.get('iac_format', '-')})..."
+    )
+
+    outcome = client.analyze_raw(body)
+
+    # Surface errors inside HTTP 200 envelopes
+    if not outcome.ok:
+        if outcome.transport_error:
+            console.print(
+                f"[red]API error (HTTP {outcome.http_status}):[/red] "
+                f"{outcome.transport_error[:300]}"
+            )
+        if outcome.errors:
+            console.print("[red]Analysis failed:[/red]")
+            for err in outcome.errors:
+                comp = err.get("component", "?")
+                code = err.get("error_code", "?")
+                msg = err.get("error_message", "?")
+                console.print(f"  - [{comp}] {code}: {msg}")
+        raise typer.Exit(outcome.exit_code())
+
+    console.print(
+        f"[green]OK[/green] decision={outcome.decision} "
+        f"monthly=${outcome.total_monthly_usd:,.2f}"
+    )
+    raise typer.Exit(0)
+
+
+@app.command()
 def version():
     """Show version information."""
     console.print(f"CostGuard CLI v{__version__}")

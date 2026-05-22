@@ -4,12 +4,12 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "costguard"
-version = "0.1.0"
+version = "0.2.2"
 description = "CostGuard CLI - Cloud Cost Analysis Tool"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [
-    {name = "SkyXOps", email = "support@skyxops.com"}
+    {name = "SKYXOPS", email = "support@skyxops.com"}
 ]
 classifiers = [
     "Development Status :: 4 - Beta",

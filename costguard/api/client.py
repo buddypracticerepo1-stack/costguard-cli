@@ -1,10 +1,37 @@
 """CostGuard API client"""
 
 import uuid
-from typing import Dict, List, Optional, Any
-from dataclasses import dataclass
+from typing import Dict, List, Optional, Any, Tuple
+from dataclasses import dataclass, field
 
 import requests
+
+
+@dataclass
+class AnalyzeOutcome:
+    """Outcome of a single /v1/costguard/analyze call.
+
+    The CostGuard API can return HTTP 200 with results.errors[] populated
+    (decision=ERROR), which a naive HTTP-status check treats as success.
+    This dataclass surfaces both the transport status and the analysis
+    status so callers can exit non-zero on either failure mode.
+    """
+
+    http_status: int
+    ok: bool                       # True iff HTTP 2xx AND no analysis errors
+    total_monthly_usd: float = 0.0
+    decision: str = "UNKNOWN"
+    errors: List[Dict[str, Any]] = field(default_factory=list)
+    raw_response: Optional[Dict[str, Any]] = None
+    transport_error: Optional[str] = None
+
+    def exit_code(self) -> int:
+        """0 = ok, 1 = analysis failed (200 + errors), 2 = transport/server error."""
+        if self.ok:
+            return 0
+        if self.http_status and 200 <= self.http_status < 300:
+            return 1
+        return 2
 
 
 @dataclass
@@ -55,12 +82,73 @@ class CostGuardClient:
     def __init__(
         self,
         api_key: str,
-        api_url: str = "https://4tm9xj5nv0.execute-api.us-east-1.amazonaws.com/rnd",
+        api_url: str = "https://4tm9xj5nv0.execute-api.us-east-1.amazonaws.com/rnd/v1/costguard/analyze",
         timeout: int = 60
     ):
         self.api_key = api_key
+        # User provides the FULL endpoint URL (including the path). The
+        # client posts to this URL verbatim — no path appending. Keeps the
+        # contract simple: whatever you pass is exactly what gets POSTed.
         self.api_url = api_url.rstrip("/")
         self.timeout = timeout
+
+    def analyze_raw(self, body: Dict[str, Any]) -> AnalyzeOutcome:
+        """POST a pre-normalized request body and return a decision-aware outcome.
+
+        Use when the caller has already detected iac_type + normalized iac_plan
+        (e.g. via costguard.utils.detect.detect_payload). This method does NOT
+        wrap terraform-only assumptions — it sends `body` as-is.
+
+        Crucially, it inspects `results.errors[]` even on HTTP 200 so that the
+        server-side "200 + decision=ERROR" envelope can't masquerade as
+        success (the issue that hid `'str' object has no attribute 'get'`
+        CFN-parser crashes in CI workflows that only checked the HTTP status).
+        """
+        try:
+            r = requests.post(
+                self.api_url,
+                json=body,
+                headers={
+                    "x-api-key": self.api_key,
+                    "Content-Type": "application/json",
+                },
+                timeout=self.timeout,
+            )
+        except requests.exceptions.RequestException as exc:
+            return AnalyzeOutcome(
+                http_status=0, ok=False, transport_error=str(exc)
+            )
+
+        try:
+            data = r.json() if r.text else None
+        except ValueError:
+            data = None
+
+        if r.status_code >= 400 or data is None:
+            return AnalyzeOutcome(
+                http_status=r.status_code,
+                ok=False,
+                raw_response=data,
+                transport_error=(r.text[:500] if data is None else None),
+            )
+
+        results = data.get("results", {}) or {}
+        errors = results.get("errors", []) or []
+        decision = (
+            data.get("endpoint_data", {}).get("decision")
+            or results.get("decision")
+            or "UNKNOWN"
+        )
+        total = results.get("total_monthly_usd", 0) or 0
+
+        return AnalyzeOutcome(
+            http_status=r.status_code,
+            ok=(not errors and decision != "ERROR"),
+            total_monthly_usd=float(total),
+            decision=decision,
+            errors=errors,
+            raw_response=data,
+        )
 
     def analyze_plan(
         self,
@@ -103,7 +191,7 @@ class CostGuardClient:
 
         try:
             response = requests.post(
-                f"{self.api_url}/v1/costguard/analyze",
+                self.api_url,
                 json=payload,
                 headers={
                     "x-api-key": self.api_key,
